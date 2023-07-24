@@ -2,21 +2,42 @@
 // https://github.com/maarten-pennings/MPU6050
 #ifndef _MPU6050_H_
 #define _MPU6050_H_
-
+/**
+ * TODO: PICO anpassen
+*/
+#ifndef PICO
+#define PICO
+#endif
 #include <stdint.h>
+#include <math.h>
+#ifndef PICO
 #include <Arduino.h>
-
+#else
+extern "C"{
+  #include "hardware/i2c.h"
+}
+#endif
 
 // Generic constants
 // =================
 
 #define MPU6050_VERSION               "1.0"
 #define MPU6050_GRAVITY_EARTH         9.80665 // m/s^2
-
+#ifdef PICO
+#define PI M_PI
+#define I2C_SDA 8
+#define I2C_SCL 9
+#endif
 
 // Data types storing the measurement results of the MPU6050
 // =========================================================
-
+int test_LKA(int a, int b);
+/**
+ * TODO: PICO anpassen
+*/
+#ifdef PICO
+int millis(void);
+#endif
 // Internal structure storing calibration data
 struct MPU6050_Calibrate_t { public:
     float accel_x, accel_y; 
@@ -103,7 +124,14 @@ class MPU6050 {
 
         // Wake-up device, configure and calibrate it. Returns I2C communication result: 0 is ok, otherwise see error_str()
         int begin(int calibrationsamples=500, MPU6050_AccelRange ar= Max2g, MPU6050_GyroRange gr= Max250Dps, MPU6050_DLPFBandwidth bw= Max260Hz, MPU6050_SampleRateDiv sr= Div7);
-
+        #ifdef PICO
+        int begin(int calibrationsamples=500, 
+                  MPU6050_AccelRange ar= Max2g, 
+                  MPU6050_GyroRange gr= Max250Dps, 
+                  MPU6050_DLPFBandwidth bw= Max260Hz, 
+                  MPU6050_SampleRateDiv sr= Div7,
+                  i2c_inst_t* i2c_inst = i2c0);
+        #endif
         // Execute measurement and return result
         MPU6050_t       get();
 
@@ -130,6 +158,9 @@ class MPU6050 {
         MPU6050_GyroRange   _gyrorange;
         MPU6050_Calibrate_t _calibrate;
         MPU6050_Dir_t       _direction;
+        #ifdef PICO
+        i2c_inst_t*         _i2c_inst;
+        #endif
         
         // Converts acceleration data to x and y angles (no z...??)        
         float angle_x(MPU6050_Accel_t accel);

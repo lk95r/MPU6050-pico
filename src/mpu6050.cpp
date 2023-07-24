@@ -4,9 +4,15 @@
 //   https://github.com/Th-Havy/Simple-MPU6050-Arduino and 
 //   https://howtomechatronics.com/tutorials/arduino/arduino-and-mpu6050-accelerometer-and-gyroscope-tutorial/ for updateDirection()
 //   https://www.nxp.com/files-static/sensors/doc/app_note/AN3461.pdf for angle_x() and angle_y()
-
+#define PICO
+#ifndef PICO
 #include <Wire.h>
-#include "MPU6050.h"
+#else
+extern "C"{
+  #include "hardware/i2c.h"
+}
+#endif
+#include "mpu6050.h"
 
 // Selected MPU6050 register addresses, see 
 // https://43zrtwysvxb2gf29r5o0athu-wpengine.netdna-ssl.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf
@@ -39,6 +45,20 @@
 #define MPU6050_ACCEL_FACTOR_8        (MPU6050_GRAVITY_EARTH / 4096.0)
 #define MPU6050_ACCEL_FACTOR_16       (MPU6050_GRAVITY_EARTH / 2048.0)
 
+
+int test_LKA(int a, int b){
+    return a+b;
+}
+
+/**
+ * TODO: millis implementieren
+ * TODO: PICO anpassen
+*/
+#ifdef PICO
+int millis(void){
+    return 0;
+}
+#endif
 MPU6050::MPU6050() {
     _devaddress= MPU6050_DEFAULT_ADDRESS;
 }
@@ -66,7 +86,39 @@ int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRa
     
     return 0;
 }
+#ifdef PICO
+    int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRange gr, MPU6050_DLPFBandwidth bw, MPU6050_SampleRateDiv sr,i2c_inst_t* i2c_inst){
+        int error;
+        error= absent();                      if( error ) return error;
+        error= wake();                        if( error ) return error;
+        error= setSampleRateDivider(sr);      if( error ) return error;
+        error= setAccelRange(ar);             if( error ) return error;
+        error= setGyroRange(gr);              if( error ) return error;
+        error= setDLPFBandwidth(bw);          if( error ) return error;
+        
+        if( calibrationsamples==0 ) {
+            // No corrections will be applied
+            _calibrate.accel_x= _calibrate.accel_y= _calibrate.gyro_x= _calibrate.gyro_y= _calibrate.gyro_z= 0;
+        } else {
+            error= calibrate(calibrationsamples); if( error ) return error;
+        }
 
+        _direction.gyro_time_ms= millis();         
+        _direction.gyro_angle_x= 0;
+        _direction.gyro_angle_y= 0;
+        _direction.gyro_angle_z= 0;
+        _i2c_inst = i2c_inst;
+
+        //TODO: in Func. auslagern
+        i2c_init(_i2c_inst, 400*1000);
+    
+        gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_SDA);
+        gpio_pull_up(I2C_SCL);
+        return 0;
+                }
+#endif
 MPU6050_t MPU6050::get() {
     MPU6050_t all;
 
@@ -308,28 +360,39 @@ float MPU6050::rawAccelerationToMps2(int16_t rawAcceleration) {
 // Read 'value' from the registers starting at 'addr'. Returns error; see error_str() for explanation.
 int MPU6050::read8(uint8_t addr, uint8_t *value) {
     *value=0;
+    #ifndef PICO
     Wire.beginTransmission(_devaddress);
     int r1=Wire.write(addr);                                       if( r1!=1 ) return 10;
     int r2=Wire.endTransmission(false);                            if( r2!=0 ) return r2;
     int r3=Wire.requestFrom(_devaddress,(uint8_t)1,(uint8_t)true); if( r3!=1 ) return 11;
     *value=Wire.read();
+    #else
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
+    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,value,sizeof(*value),false); if(r2!=1) return 11;
+    #endif
     return 0;
 }
 
 // Read 'value' from the registers starting at 'addr'. Returns error; see error_str() for explanation.
 int MPU6050::read16(uint8_t addr, uint16_t *value ) {
     *value=0;
+    #ifndef PICO
     Wire.beginTransmission(_devaddress);
     int r1=Wire.write(addr);                                       if( r1!=1 ) return 10;
     int r2=Wire.endTransmission(false);                            if( r2!=0 ) return r2;
     int r3=Wire.requestFrom(_devaddress,(uint8_t)2,(uint8_t)true); if( r3!=2 ) return 11;
     *value=Wire.read()<<8 | Wire.read(); 
+    #else
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
+    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,value,sizeof(*value),false); if(r2!=2) return 11;
+    #endif
     return 0;
 }
 
 // Read 3x'value' from the 3 registers starting at 'addr'. Returns error; see error_str() for explanation.
 int MPU6050::read3x16(uint8_t addr, uint16_t *value0,  uint16_t *value1, uint16_t *value2 ) {
     *value0= *value1= *value2= 0;
+    #ifndef PICO
     Wire.beginTransmission(_devaddress);
     int r1=Wire.write(addr);                                       if( r1!=1 ) return 10;
     int r2=Wire.endTransmission(false);                            if( r2!=0 ) return r2;
@@ -337,15 +400,28 @@ int MPU6050::read3x16(uint8_t addr, uint16_t *value0,  uint16_t *value1, uint16_
     *value0=Wire.read()<<8 | Wire.read(); 
     *value1=Wire.read()<<8 | Wire.read(); 
     *value2=Wire.read()<<8 | Wire.read(); 
+    #else
+    uint16_t buffer[3]={0,0,0}
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
+    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,&buffer,3*sizeof(*value),false); if(r2!=6) return 11;
+    *value0=buffer[0];
+    *value1=buffer[1];
+    *value2=buffer[2];
+    #endif
     return 0;
 }
 
 // Write 'value' to register at address 'addr'. Returns error; see error_str() for explanation.
 int MPU6050::write8(uint8_t addr, uint8_t value) {
+    #ifndef PICO
     Wire.beginTransmission(_devaddress);
     int r1=Wire.write(addr);                                       if( r1!=1 ) return 10;
     int r2=Wire.write(value);                                      if( r2!=1 ) return 10;
     int r3=Wire.endTransmission(true);                             if( r3!=0 ) return r3;
+    #else
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
+    int r2 = i2c_write_blocking(_i2c_inst,_devaddress,value,sizeof(addr),true); if(r1!=1)return 10;
+    #endif
     return 0;
 }
 
