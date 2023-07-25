@@ -62,7 +62,7 @@ int millis(void){
 MPU6050::MPU6050() {
     _devaddress= MPU6050_DEFAULT_ADDRESS;
 }
-
+#ifndef PICO
 int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRange gr, MPU6050_DLPFBandwidth bw, MPU6050_SampleRateDiv sr) {
     int error;
     error= absent();                      if( error ) return error;
@@ -86,9 +86,22 @@ int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRa
     
     return 0;
 }
-#ifdef PICO
-    int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRange gr, MPU6050_DLPFBandwidth bw, MPU6050_SampleRateDiv sr,i2c_inst_t* i2c_inst){
+#else
+    int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRange gr, MPU6050_DLPFBandwidth bw, MPU6050_SampleRateDiv sr,void* i2c_inst){
+        //TODO: in Func. auslagern
         int error;
+        _i2c_inst = (i2c_inst_t *)i2c_inst;
+        error = i2c_init(_i2c_inst, 100*1000);
+        if ((error-(100*1000))>10000){
+            return 1;
+        }else if((error-(100*1000))<-10000){
+            return -1;
+        }
+        gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_SDA);
+        gpio_pull_up(I2C_SCL);
+        //int error;
         error= absent();                      if( error ) return error;
         error= wake();                        if( error ) return error;
         error= setSampleRateDivider(sr);      if( error ) return error;
@@ -107,15 +120,9 @@ int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRa
         _direction.gyro_angle_x= 0;
         _direction.gyro_angle_y= 0;
         _direction.gyro_angle_z= 0;
-        _i2c_inst = i2c_inst;
 
-        //TODO: in Func. auslagern
-        i2c_init(_i2c_inst, 400*1000);
-    
-        gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-        gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-        gpio_pull_up(I2C_SDA);
-        gpio_pull_up(I2C_SCL);
+
+
         return 0;
                 }
 #endif
@@ -367,8 +374,11 @@ int MPU6050::read8(uint8_t addr, uint8_t *value) {
     int r3=Wire.requestFrom(_devaddress,(uint8_t)1,(uint8_t)true); if( r3!=1 ) return 11;
     *value=Wire.read();
     #else
-    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
+    //const uint8_t *p_addr = &addr;
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,&addr,sizeof(addr),true); if(r1!=1)return 10;
     int r2 = i2c_read_blocking(_i2c_inst,_devaddress,value,sizeof(*value),false); if(r2!=1) return 11;
+    printf("Val8_t: %d\n",*value);
+    //temp_addr = 0;
     #endif
     return 0;
 }
@@ -383,8 +393,11 @@ int MPU6050::read16(uint8_t addr, uint16_t *value ) {
     int r3=Wire.requestFrom(_devaddress,(uint8_t)2,(uint8_t)true); if( r3!=2 ) return 11;
     *value=Wire.read()<<8 | Wire.read(); 
     #else
-    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
-    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,value,sizeof(*value),false); if(r2!=2) return 11;
+    uint8_t buffer[2]={1,1};
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,&addr,sizeof(addr),true); if(r1!=1)return 10;
+    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,(uint8_t*) buffer,2,false); if(r2!=2) return 11;
+    *value = buffer[0]<<8 | buffer [1];
+    printf("Val16_t: %d\n",*value);
     #endif
     return 0;
 }
@@ -401,12 +414,14 @@ int MPU6050::read3x16(uint8_t addr, uint16_t *value0,  uint16_t *value1, uint16_
     *value1=Wire.read()<<8 | Wire.read(); 
     *value2=Wire.read()<<8 | Wire.read(); 
     #else
-    uint16_t buffer[3]={0,0,0}
-    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
-    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,&buffer,3*sizeof(*value),false); if(r2!=6) return 11;
-    *value0=buffer[0];
-    *value1=buffer[1];
-    *value2=buffer[2];
+    
+    uint16_t buffer[6]={0,0,0,0,0,0};
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,&addr,sizeof(addr),true); if(r1!=1)return 10;
+    int r2 = i2c_read_blocking(_i2c_inst,_devaddress,(uint8_t *)&buffer,3*sizeof(*value0),false); if(r2!=6) return 11;
+    printf("buffer:%i,%i,%i\n",buffer[0],buffer[1],buffer[2]);
+    *value0=buffer[0]<<8|buffer[1];
+    *value1=buffer[2]<<8|buffer[3];
+    *value2=buffer[4]<<8|buffer[5];
     #endif
     return 0;
 }
@@ -419,8 +434,11 @@ int MPU6050::write8(uint8_t addr, uint8_t value) {
     int r2=Wire.write(value);                                      if( r2!=1 ) return 10;
     int r3=Wire.endTransmission(true);                             if( r3!=0 ) return r3;
     #else
-    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,addr,sizeof(addr),true); if(r1!=1)return 10;
-    int r2 = i2c_write_blocking(_i2c_inst,_devaddress,value,sizeof(addr),true); if(r1!=1)return 10;
+    uint8_t buffer[2];
+    buffer[1]=addr;
+    buffer[2]=value;
+    int r1 = i2c_write_blocking(_i2c_inst,_devaddress,buffer,2,false); if(r1!=2)return 10;
+    //int r2 = i2c_write_blocking(_i2c_inst,_devaddress,&value,sizeof(addr),false); if(r1!=1)return 10;
     #endif
     return 0;
 }

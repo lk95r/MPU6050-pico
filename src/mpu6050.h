@@ -13,9 +13,10 @@
 #ifndef PICO
 #include <Arduino.h>
 #else
-extern "C"{
-  #include "hardware/i2c.h"
-}
+#include "hardware/i2c.h"
+#include "pico/stdlib.h"
+#include <stdio.h>
+
 #endif
 
 // Generic constants
@@ -123,14 +124,15 @@ class MPU6050 {
         MPU6050();
 
         // Wake-up device, configure and calibrate it. Returns I2C communication result: 0 is ok, otherwise see error_str()
+        #ifndef PICO
         int begin(int calibrationsamples=500, MPU6050_AccelRange ar= Max2g, MPU6050_GyroRange gr= Max250Dps, MPU6050_DLPFBandwidth bw= Max260Hz, MPU6050_SampleRateDiv sr= Div7);
-        #ifdef PICO
+        #else
         int begin(int calibrationsamples=500, 
                   MPU6050_AccelRange ar= Max2g, 
                   MPU6050_GyroRange gr= Max250Dps, 
                   MPU6050_DLPFBandwidth bw= Max260Hz, 
                   MPU6050_SampleRateDiv sr= Div7,
-                  i2c_inst_t* i2c_inst = i2c0);
+                  void* i2c_inst = i2c0);
         #endif
         // Execute measurement and return result
         MPU6050_t       get();
@@ -152,7 +154,7 @@ class MPU6050 {
         // Calibration of the sensors. Returns I2C communication result: 0 is ok, otherwise see error_str()
         int calibrate(int numsamples);
 
-    private:
+    //private:
         uint8_t             _devaddress;
         MPU6050_AccelRange  _accelrange;
         MPU6050_GyroRange   _gyrorange;
