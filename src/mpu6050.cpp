@@ -56,7 +56,7 @@ int test_LKA(int a, int b){
 */
 #ifdef PICO
 int millis(void){
-    return 0;
+    return time_us_32()/1000;
 }
 #endif
 MPU6050::MPU6050() {
