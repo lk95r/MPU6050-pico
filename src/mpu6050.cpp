@@ -102,7 +102,9 @@ int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRa
         gpio_pull_up(I2C_SDA);
         gpio_pull_up(I2C_SCL);
         //int error;
+        uint8_t write_error=0;
         error= absent();                      if( error ) return error;
+
         error= wake();                        if( error ) return error;
         error= setSampleRateDivider(sr);      if( error ) return error;
         error= setAccelRange(ar);             if( error ) return error;
@@ -120,7 +122,6 @@ int MPU6050::begin(int calibrationsamples, MPU6050_AccelRange ar, MPU6050_GyroRa
         _direction.gyro_angle_x= 0;
         _direction.gyro_angle_y= 0;
         _direction.gyro_angle_z= 0;
-
 
 
         return 0;
@@ -375,9 +376,13 @@ int MPU6050::read8(uint8_t addr, uint8_t *value) {
     *value=Wire.read();
     #else
     //const uint8_t *p_addr = &addr;
+    uint8_t addr_temp_h = 0x41;
+    printf("func: read8\n");
+    printf("Sent:0x%x\n",addr);
     int r1 = i2c_write_blocking(_i2c_inst,_devaddress,&addr,sizeof(addr),true); if(r1!=1)return 10;
     int r2 = i2c_read_blocking(_i2c_inst,_devaddress,value,sizeof(*value),false); if(r2!=1) return 11;
-    printf("Val8_t: %d\n",*value);
+
+    printf("rec: %d\n",*value);
     //temp_addr = 0;
     #endif
     return 0;
@@ -394,10 +399,12 @@ int MPU6050::read16(uint8_t addr, uint16_t *value ) {
     *value=Wire.read()<<8 | Wire.read(); 
     #else
     uint8_t buffer[2]={1,1};
+    printf("func: read 16\n");
+    printf("sent:0x%x\n",addr);
     int r1 = i2c_write_blocking(_i2c_inst,_devaddress,&addr,sizeof(addr),true); if(r1!=1)return 10;
     int r2 = i2c_read_blocking(_i2c_inst,_devaddress,(uint8_t*) buffer,2,false); if(r2!=2) return 11;
     *value = buffer[0]<<8 | buffer [1];
-    printf("Val16_t: %d\n",*value);
+    printf("rec: %d\n",*value);
     #endif
     return 0;
 }
@@ -416,9 +423,11 @@ int MPU6050::read3x16(uint8_t addr, uint16_t *value0,  uint16_t *value1, uint16_
     #else
     
     uint16_t buffer[6]={0,0,0,0,0,0};
+    printf("func: read 3x16\n");
+    printf("sent:0x%x\n",addr);
     int r1 = i2c_write_blocking(_i2c_inst,_devaddress,&addr,sizeof(addr),true); if(r1!=1)return 10;
     int r2 = i2c_read_blocking(_i2c_inst,_devaddress,(uint8_t *)&buffer,3*sizeof(*value0),false); if(r2!=6) return 11;
-    printf("buffer:%i,%i,%i\n",buffer[0],buffer[1],buffer[2]);
+    printf("rec: %i,%i,%i\n",buffer[0],buffer[1],buffer[2]);
     *value0=buffer[0]<<8|buffer[1];
     *value1=buffer[2]<<8|buffer[3];
     *value2=buffer[4]<<8|buffer[5];
@@ -437,6 +446,7 @@ int MPU6050::write8(uint8_t addr, uint8_t value) {
     uint8_t buffer[2];
     buffer[1]=addr;
     buffer[2]=value;
+    printf("func: write 8\nsent:0x%x , 0x%x\n",addr,value);
     int r1 = i2c_write_blocking(_i2c_inst,_devaddress,buffer,2,false); if(r1!=2)return 10;
     //int r2 = i2c_write_blocking(_i2c_inst,_devaddress,&value,sizeof(addr),false); if(r1!=1)return 10;
     #endif

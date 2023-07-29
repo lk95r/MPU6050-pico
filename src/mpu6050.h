@@ -26,8 +26,8 @@
 #define MPU6050_GRAVITY_EARTH         9.80665 // m/s^2
 #ifdef PICO
 #define PI M_PI
-#define I2C_SDA 8
-#define I2C_SCL 9
+#define I2C_SDA 6
+#define I2C_SCL 7
 #endif
 
 // Data types storing the measurement results of the MPU6050
